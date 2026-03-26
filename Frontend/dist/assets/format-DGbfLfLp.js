@@ -1,0 +1,1 @@
+function i(r,n="CNY"){const t=typeof r=="string"?parseFloat(r):r;return isNaN(t)?"—":new Intl.NumberFormat("zh-CN",{style:"currency",currency:n,minimumFractionDigits:2}).format(t)}function e(r){return r?r.slice(0,10):"—"}export{e as a,i as f};

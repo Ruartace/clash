@@ -1,0 +1,1 @@
+import{L as c,r as e}from"./index-7iF-9JMm.js";import{g as n}from"./accounts-B0NIJPMi.js";const f=c("account",()=>{const a=e([]),t=e(!1);async function o(){t.value=!0;try{const s=await n();a.value=s.data.data.results}finally{t.value=!1}}return{accounts:a,loading:t,fetchAccounts:o}});export{f as u};
