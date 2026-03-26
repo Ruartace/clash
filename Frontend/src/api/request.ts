@@ -36,11 +36,19 @@ service.interceptors.response.use(
   (error) => {
     if (error.response) {
       const status = error.response.status
+      const requestUrl = error.config?.url || ''
       if (status === 401) {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
-        window.location.href = '/login'
-        ElMessage.error('登录已过期，请重新登录')
+        // 登录接口本身返回 401 = 账号或密码错误
+        if (requestUrl.includes('/auth/login/')) {
+          const detail = error.response.data?.detail
+          ElMessage.error(detail || '邮箱或密码错误')
+        } else {
+          // 其他接口 401 = token 过期
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
+          window.location.href = '/login'
+          ElMessage.error('登录已过期，请重新登录')
+        }
       } else if (status === 403) {
         ElMessage.error('无权限访问')
       } else if (status === 404) {
