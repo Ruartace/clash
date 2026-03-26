@@ -1,0 +1,121 @@
+---
+description: 项目整体开发流程规则（Clash 个人财务管理系统）
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# 项目整体开发流程规则
+
+## 项目概述
+
+**Clash** 是一个面向个人用户的现金流与资产可视化管理平台。
+
+- **后端**：Python + Django + Django REST Framework + PostgreSQL + Redis
+- **前端**：Vue 3 + TypeScript + Vite + Element Plus + ECharts + Pinia
+- **认证**：JWT（djangorestframework-simplejwt）
+
+---
+
+## 核心开发原则
+
+1. **禁止删除文件**：任何情况下不得使用终端或工具删除项目文件/目录，需要废弃的代码用注释标记或移入 `_archive/` 目录
+2. **谨慎使用终端**：终端仅用于启动服务、安装依赖、数据库迁移等必要操作，代码修改优先通过编辑器完成
+3. **小步提交**：每完成一个独立功能点即提交，避免大批量改动
+4. **先后端后前端**：新功能开发顺序为 Model → Serializer → Service → View → URL → 前端 API → 前端页面
+
+---
+
+## 开发流程
+
+### 阶段一：需求分析
+
+- 明确功能边界，拆解为具体的 API 接口列表
+- 确认数据模型字段，评估对已有 Model 的影响
+- 在开始编码前，与用户确认接口设计方案
+
+### 阶段二：后端开发
+
+按以下顺序逐步完成：
+
+1. **Model**：在对应 App 的 `models.py` 中定义数据模型
+2. **Migration**：执行 `python manage.py makemigrations` 生成迁移文件
+3. **Serializer**：在 `serializers.py` 中定义序列化器与字段验证
+4. **Service**：在 `services.py` 中编写业务逻辑
+5. **View**：在 `views.py` 中编写 ViewSet / APIView，调用 Service
+6. **URL**：在 `urls.py` 中注册路由
+7. **测试**：使用 Django TestCase 或 pytest 验证接口
+
+### 阶段三：前端开发
+
+按以下顺序逐步完成：
+
+1. **类型定义**：在 `src/types/` 中定义请求/响应数据类型
+2. **API 函数**：在 `src/api/` 中封装对应接口调用函数
+3. **Store**：在 `src/store/` 中定义 Pinia Store（如需全局状态）
+4. **组件**：开发页面所需的子组件
+5. **页面**：在 `src/views/` 中开发页面，组合组件与 Store
+6. **路由**：在 `src/router/` 中注册新页面路由
+
+### 阶段四：联调与测试
+
+- 前后端联调，验证接口数据格式是否匹配
+- 检查 JWT Token 鉴权是否正常
+- 验证错误边界处理（网络错误、业务错误）
+- 测试图表数据渲染是否正确
+
+### 阶段五：提交
+
+- 遵循 **Conventional Commits** 规范提交，格式：`type(scope): subject`
+- 常用 type：`feat` / `fix` / `docs` / `style` / `refactor` / `test` / `chore`
+- 示例：`feat(transactions): add monthly summary API`
+
+---
+
+## Git 分支规范
+
+| 分支类型 | 命名格式 | 说明 |
+|----------|----------|------|
+| 主分支 | `main` | 稳定可发布代码 |
+| 开发分支 | `develop` | 日常开发集成分支 |
+| 功能分支 | `feat/xxx` | 新功能开发 |
+| 修复分支 | `fix/xxx` | Bug 修复 |
+| 文档分支 | `docs/xxx` | 文档更新 |
+
+---
+
+## 安全规范
+
+- `.env` 文件禁止提交到 Git，确保 `.gitignore` 中已排除
+- 数据库密码、Secret Key、API Key 等敏感信息仅通过环境变量注入
+- JWT Token 有效期：Access Token 2 小时，Refresh Token 7 天
+- 所有涉及金额的计算必须在后端完成，前端仅做展示
+
+---
+
+## 终端使用规范（全局）
+
+- **严禁** 使用终端执行任何删除命令（`rm` / `del` / `rmdir` 等）
+- **严禁** 使用终端直接修改代码文件（`echo` 写文件、`sed` 替换等）
+- 终端允许的操作范围：
+  - 启动/停止服务
+  - 安装/更新依赖（`pip install` / `npm install`）
+  - 数据库迁移（`python manage.py migrate`）
+  - Git 操作（`git add` / `git commit` / `git push`）
+  - 查看日志与进程状态
+
+---
+
+## 代码质量
+
+- 后端：使用 `flake8` 或 `ruff` 进行代码检查
+- 前端：使用 `ESLint` + `Prettier` 保持代码风格一致
+- 提交前确保无 lint 错误、无 TypeScript 类型错误
+- 复杂业务逻辑必须添加注释说明
+
+---
+
+## 个人财务数据隐私要求
+
+- 用户数据严格隔离，所有查询必须过滤当前登录用户（`request.user`）
+- 禁止任何接口返回其他用户的财务数据
+- 金额、账户等敏感字段在日志中脱敏处理

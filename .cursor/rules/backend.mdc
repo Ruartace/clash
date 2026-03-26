@@ -1,0 +1,70 @@
+---
+description: 后端开发规则（Django + PostgreSQL）
+globs: ["Backend/**/*.py", "Backend/**/requirements*.txt", "Backend/**/*.env*"]
+alwaysApply: false
+---
+
+# 后端开发规则
+
+## 技术栈约束
+
+- 语言：**Python 3.11+**，严格遵循 **PEP 8** 编码规范
+- 框架：**Django**，API 层使用 **Django REST Framework**
+- 数据库：**PostgreSQL 15+**，通过 **Django ORM** 访问，禁止裸写原生 SQL（复杂查询除外，需加注释说明）
+- 缓存：**Redis**，用于会话管理与热点数据缓存
+- 认证：**djangorestframework-simplejwt**，所有需鉴权接口必须携带 Bearer Token
+
+## 项目结构规范
+
+- 每个业务域独立为一个 Django App，放置于 `apps/` 目录下
+- App 内部结构：`models.py` / `serializers.py` / `views.py` / `urls.py` / `services.py`（业务逻辑）
+- 禁止在 `views.py` 中直接编写业务逻辑，业务逻辑统一放入 `services.py`
+- 配置文件敏感信息（数据库密码、Secret Key 等）必须通过 `.env` 文件注入，禁止硬编码
+
+## App 模块清单
+
+| App | 路由前缀 | 职责 |
+|-----|----------|------|
+| users | `/api/auth/` | 用户注册、登录、JWT 认证 |
+| accounts | `/api/accounts/` | 多账户管理、余额同步 |
+| transactions | `/api/transactions/` | 收支流水记录与分类 |
+| assets | `/api/assets/` | 固定资产与金融资产管理 |
+| liabilities | `/api/liabilities/` | 负债记录与净资产计算 |
+| budgets | `/api/budgets/` | 月度预算设置与追踪 |
+| goals | `/api/goals/` | 财务目标与储蓄进度 |
+| statistics | `/api/statistics/` | 可视化统计数据接口 |
+
+## 接口规范
+
+- 遵循 **RESTful** 风格：GET 查询 / POST 创建 / PUT 全量更新 / PATCH 部分更新 / DELETE 删除
+- 统一响应结构：
+  ```json
+  {
+    "code": 200,
+    "message": "success",
+    "data": {}
+  }
+  ```
+- 错误响应同样遵循统一结构，`code` 使用标准 HTTP 状态码
+- 分页接口统一使用 DRF `PageNumberPagination`，默认每页 20 条
+
+## 数据库规范
+
+- 所有 Model 必须包含 `created_at` 和 `updated_at` 字段（使用 `auto_now_add` / `auto_now`）
+- 软删除优先：敏感数据（如流水、资产记录）使用 `is_deleted` 字段标记，禁止物理删除
+- 金额字段统一使用 `DecimalField(max_digits=15, decimal_places=2)`，禁止使用 `FloatField`
+- 外键必须设置 `on_delete` 策略，默认使用 `PROTECT` 防止误删关联数据
+- 迁移文件（migrations）必须纳入版本控制
+
+## 安全规范
+
+- 所有用户输入必须通过 DRF Serializer 验证，禁止直接使用 `request.data` 写库
+- 敏感接口（修改密码、删除数据）需要二次验证
+- CORS 配置仅允许前端域名，禁止使用 `CORS_ALLOW_ALL_ORIGINS = True`（生产环境）
+
+## 终端操作规范
+
+- **禁止使用终端直接删除任何文件或目录**
+- 数据库迁移必须先执行 `makemigrations` 再执行 `migrate`，不得跳过
+- 依赖变更后必须同步更新 `requirements.txt`：`pip freeze > requirements.txt`
+- 谨慎使用终端修改代码，优先通过编辑器直接修改文件
