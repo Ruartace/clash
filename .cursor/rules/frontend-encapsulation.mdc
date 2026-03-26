@@ -1,0 +1,504 @@
+---
+description: 前端 Vue 3 封装规范（样式体系 / 主题 / 接口 / 模块分类）
+globs: ["Frontend/**/*.vue", "Frontend/**/*.ts", "Frontend/**/*.css"]
+alwaysApply: false
+---
+
+# 前端封装规范（Vue 3 + TypeScript）
+
+> 本规范聚焦于四个核心维度：**样式体系**、**主题设计**、**接口封装**、**模块分类维护**。
+> 与 `frontend.mdc` 配合使用：`frontend.mdc` 约束技术栈与命名，本文件规定封装落地细节。
+>
+> 项目当前使用**纯暗色黑金主题**（Dark Gold），三色体系：`#C8AD7E`（金）/ `#171716`（黑）/ `#BFBEBF`（灰白）。
+> CSS 变量定义于 `global.css`，字体采用 `DM Sans`。
+
+---
+
+## 一、样式封装规范
+
+### 1.1 目录结构
+
+```
+Frontend/src/assets/styles/
+├── global.css        # CSS 变量定义 + Reset + 全局基础样式 + Element Plus 覆盖
+└── chart-theme.ts    # ECharts 统一颜色与主题配置（TypeScript）
+```
+
+### 1.2 CSS 自定义属性规范
+
+**当前黑金主题变量**（组件中必须引用这些变量，禁止硬编码色值）：
+
+```css
+:root {
+  /* 背景色阶 */
+  --color-bg-primary:    #0f0f0e;
+  --color-bg-secondary:  #171716;
+  --color-bg-card:       #1e1d1b;
+  --color-bg-hover:      #272522;
+  --color-border:        #2e2b27;
+  --color-border-gold:   #c8ad7e55;
+
+  /* 文字色阶 */
+  --color-text-primary:   #bfbebf;
+  --color-text-secondary: #bfbebf;
+  --color-text-muted:     #7a7874;
+
+  /* 功能色（黄金强调） */
+  --color-accent:        #c8ad7e;
+  --color-accent-hover:  #ddc898;
+  --color-accent-dim:    #9e8660;
+  --color-accent-subtle: #c8ad7e1a;
+
+  /* 语义色 */
+  --color-success: #4caf82;
+  --color-warning: #e6a817;
+  --color-danger:  #e05c5c;
+  --color-income:  #4caf82;
+  --color-expense: #e05c5c;
+
+  /* 圆角 */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  /* 阴影 */
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.55);
+  --shadow-gold: 0 0 20px rgba(200, 173, 126, 0.12);
+
+  /* 字体 */
+  --font-sans: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* 过渡 */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.2s ease;
+
+  /* Element Plus 原生变量覆盖（完整列表见 global.css） */
+  --el-color-white:              #bfbebf;
+  --el-text-color-primary:       #bfbebf;
+  --el-text-color-regular:       #bfbebf;
+  --el-text-color-secondary:     #7a7874;
+  --el-text-color-placeholder:   #7a7874;
+  --el-text-color-disabled:      #4a4845;
+  --el-fill-color:               #272522;
+  --el-fill-color-blank:         #1e1d1b;
+  --el-bg-color:                 #1e1d1b;
+  --el-bg-color-page:            #0f0f0e;
+  --el-bg-color-overlay:         #1e1d1b;
+  --el-border-color:             #2e2b27;
+  --el-color-primary:            #c8ad7e;
+  --el-color-primary-dark-2:     #b09a6e;
+  --el-overlay-color:            rgba(0, 0, 0, 0.7);
+  --el-mask-color:               rgba(15, 15, 14, 0.8);
+}
+```
+
+**扩展变量时的命名规则**：
+- 新增颜色变量：`--color-[语义]-[变体]`，如 `--color-accent-light`
+- 新增间距变量：`--space-[n]`，以 4px 为基准
+- 禁止使用 `--clash-` 前缀
+
+### 1.3 组件 `<style scoped>` 规则
+
+```vue
+<!-- ✅ 正确：引用 CSS 变量 -->
+<style scoped>
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 24px;
+  background: var(--color-bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+  transition: border-color 0.2s ease;
+}
+
+.stat-card:hover {
+  border-color: var(--color-accent);
+}
+
+/* 穿透 Element Plus el-tag，统一财务标签圆角风格 */
+:deep(.el-tag) {
+  border-radius: var(--radius-sm);
+}
+</style>
+
+<!-- ❌ 错误：硬编码色值 -->
+<style scoped>
+.card {
+  background: #1e1d1b;   /* 禁止 */
+  color: #bfbebf;        /* 禁止 */
+}
+</style>
+```
+
+**强制规则**：
+- 所有组件必须使用 `<style scoped>`
+- 穿透 Element Plus 只能使用 `:deep()`，禁止 `/deep/` 或 `>>>`
+- 穿透样式旁必须添加注释说明穿透原因
+- CSS 类名使用 **kebab-case**
+
+### 1.4 Element Plus 主题覆盖规范（双轨机制）
+
+本项目采用**双轨覆盖**策略，对所有 Element Plus 组件拥有最大样式自由度：
+
+#### 轨道一：CSS 变量根覆盖（`:root` 中）
+
+在 `global.css` 的 `:root` 中直接覆盖 Element Plus 原生 CSS 变量。
+这是**优先级最高、影响最广**的方式，无需 `!important`，适合全局基调设定。
+
+```css
+:root {
+  /* ── Element Plus 原生变量完整覆盖 ── */
+
+  /* 白色 / 文字：原白色统一替换为 #bfbebf */
+  --el-color-white:              #bfbebf;
+  --el-text-color-primary:       #bfbebf;
+  --el-text-color-regular:       #bfbebf;
+  --el-text-color-secondary:     #7a7874;
+  --el-text-color-placeholder:   #7a7874;
+  --el-text-color-disabled:      #4a4845;
+
+  /* 填充色 */
+  --el-fill-color:               #272522;
+  --el-fill-color-light:         #1e1d1b;
+  --el-fill-color-lighter:       #171716;
+  --el-fill-color-extra-light:   #171716;
+  --el-fill-color-dark:          #2e2b27;
+  --el-fill-color-darker:        #2e2b27;
+  --el-fill-color-blank:         #1e1d1b;
+
+  /* 背景色 */
+  --el-bg-color:                 #1e1d1b;
+  --el-bg-color-page:            #0f0f0e;
+  --el-bg-color-overlay:         #1e1d1b;
+
+  /* 边框色 */
+  --el-border-color:             #2e2b27;
+  --el-border-color-light:       #2e2b27;
+  --el-border-color-lighter:     #272522;
+  --el-border-color-extra-light: #272522;
+  --el-border-color-dark:        #3a3733;
+  --el-border-color-darker:      #3a3733;
+
+  /* 主色（金色系） */
+  --el-color-primary:            #c8ad7e;
+  --el-color-primary-light-3:    #d4be98;
+  --el-color-primary-light-5:    #ddd0b5;
+  --el-color-primary-light-7:    #e8e0ce;
+  --el-color-primary-light-8:    #eee8da;
+  --el-color-primary-light-9:    #f5f1ea;
+  --el-color-primary-dark-2:     #b09a6e;
+
+  /* 遮罩 */
+  --el-overlay-color:            rgba(0, 0, 0, 0.7);
+  --el-overlay-color-light:      rgba(0, 0, 0, 0.5);
+  --el-overlay-color-lighter:    rgba(0, 0, 0, 0.3);
+  --el-mask-color:               rgba(15, 15, 14, 0.8);
+  --el-mask-color-extra-light:   rgba(15, 15, 14, 0.3);
+}
+```
+
+**新增 EP 变量覆盖时的规则**：
+- 必须写在 `:root` 的「Element Plus 原生变量覆盖」注释区块内
+- 命名遵循 `--el-` 前缀（Element Plus 官方变量名），不得自创
+- 每行注释说明覆盖意图
+
+#### 轨道二：选择器级样式覆盖（`global.css` 末尾 Overrides 区块）
+
+对于无法通过 CSS 变量控制的细粒度样式，在 `global.css` 末尾「Element Plus Overrides」区块中用类选择器覆盖，使用 `!important` 确保优先级：
+
+```css
+/* ─── Element Plus Overrides ─────────────────────────────────────────────── */
+
+/* Card */
+.el-card {
+  background: var(--color-bg-card) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-card) !important;
+  color: var(--color-text-primary) !important;
+}
+
+/* Button — primary 金色，文字用深黑 #171716 保证对比度 */
+.el-button--primary {
+  background: var(--color-accent) !important;
+  border-color: var(--color-accent) !important;
+  color: #171716 !important;
+  font-weight: 600 !important;
+}
+```
+
+**选择器覆盖规则**：
+- 覆盖选择器必须与 Element Plus 实际渲染的 class 名严格对应
+- 使用 `!important` 是此区块的规范做法，不算违规
+- 新增覆盖必须写在对应组件注释块下方，格式：`/* ComponentName */` → 样式规则
+- 不得在组件 `<style scoped>` 内用无 `:deep()` 的方式覆盖 EP 全局组件
+
+#### 双轨优先级决策
+
+| 场景 | 使用轨道 |
+|---|---|
+| 改变所有 EP 组件的颜色基调（文字、背景、边框） | 轨道一：`:root` 变量覆盖 |
+| 改变特定组件某个细节（布局、圆角、间距） | 轨道二：选择器 `!important` 覆盖 |
+| 仅改变当前组件内某个 EP 子组件的样式 | 组件内 `:deep()` 穿透 |
+
+#### 新增 EP 组件覆盖的完整流程
+
+1. 先确认 EP 官方是否提供对应 CSS 变量（查阅 [Element Plus 主题文档](https://element-plus.org/zh-CN/guide/theming.html)）
+2. 有官方变量 → **轨道一**，加入 `:root` 的 EP 变量覆盖区块
+3. 无官方变量或需精细控制 → **轨道二**，加入 `global.css` Overrides 区块
+4. 仅单页面生效 → 组件内 **`:deep()`** 穿透，并注释说明原因
+
+### 1.5 动画规范
+
+- 微交互动画时长不超过 300ms
+- 列表增删使用 Vue `<TransitionGroup>`，动画类名前缀统一为 `list-`
+- 图表动画由 ECharts `animation` 配置控制，不叠加额外 CSS 动画
+- 过渡属性优先指定具体属性（`transition: border-color 0.2s ease`），避免 `transition: all`
+
+---
+
+## 二、主题设计规范
+
+### 2.1 当前主题策略（黑金 Dark Gold）
+
+项目采用**单一暗色黑金主题**，三色核心体系：
+
+| 色值 | 角色 | 对应变量 |
+|---|---|---|
+| `#C8AD7E` | 主强调色（金） | `--color-accent` / `--el-color-primary` |
+| `#171716` | 深黑背景基色 | `--color-bg-secondary` |
+| `#BFBEBF` | 主文字色（灰白） | `--color-text-primary` / `--el-color-white` |
+
+其余颜色按语义延伸：成功绿 `#4caf82`、危险红 `#e05c5c`、警告黄 `#e6a817`。
+
+**如需扩展为双主题**：
+- 亮色变量保留在 `:root` 中
+- 暗色变量在 `:root[data-theme="dark"]` 中覆盖
+- 主题状态由 `src/store/useThemeStore.ts` 管理，持久化到 `localStorage`
+- 禁止通过 JavaScript 直接修改颜色值
+
+### 2.2 ECharts 主题规范
+
+```typescript
+// chart-theme.ts — 黑金主题实际结构
+export const CHART_COLORS = {
+  primary:   '#c8ad7e',
+  secondary: '#bfbebf',
+  success:   '#4caf82',
+  warning:   '#e6a817',
+  danger:    '#e05c5c',
+  income:    '#4caf82',  // 与 --color-income 一致
+  expense:   '#e05c5c',  // 与 --color-expense 一致
+  neutral:   '#7a7874',
+  palette: [
+    '#c8ad7e', '#4caf82', '#e05c5c', '#bfbebf', '#e6a817',
+    '#9e8660', '#2dd4bf', '#a78bfa', '#fb923c', '#60a5fa',
+  ],
+}
+
+export const CHART_THEME = {
+  backgroundColor: 'transparent',
+  textStyle: { color: '#bfbebf', fontFamily: "'DM Sans', 'Noto Sans SC', sans-serif" },
+  title:   { textStyle: { color: '#bfbebf', fontSize: 14, fontWeight: '600' } },
+  legend:  { textStyle: { color: '#bfbebf' } },
+  tooltip: { backgroundColor: '#1e1d1b', borderColor: '#2e2b27', textStyle: { color: '#bfbebf' } },
+  color: CHART_COLORS.palette,
+}
+```
+
+**联动原则**：
+- `CHART_COLORS.income` / `CHART_COLORS.expense` 必须与 `--color-income` / `--color-expense` 保持一致
+- 图表组件不得自行定义颜色常量，必须从 `chart-theme.ts` 导入
+- 修改颜色时需同步检查 `global.css` 中对应的 `--color-*` 变量
+
+### 2.3 图表组件封装规范
+
+- 所有 ECharts 组件放于 `src/components/charts/`
+- 图表组件必须监听容器尺寸变化，调用 `chart.resize()`
+- 组件 Props 中暴露 `option` 对象，图表组件负责应用 `CHART_THEME` 作为基础配置
+- 组件销毁时必须调用 `chart.dispose()`
+
+```typescript
+const chart = shallowRef<echarts.ECharts>()
+onMounted(() => {
+  chart.value = echarts.init(chartEl.value)
+  chart.value.setOption(mergeOption(CHART_THEME, props.option))
+})
+onUnmounted(() => chart.value?.dispose())
+useResizeObserver(chartEl, () => chart.value?.resize())
+```
+
+---
+
+## 三、接口封装规范
+
+### 3.1 分层架构总览
+
+```
+组件 / Store
+   ↓ 调用
+api/[模块].ts        ← 业务 API 函数层
+   ↓ 使用
+api/request.ts       ← Axios 实例层
+   ↓ 请求
+Django REST API
+```
+
+### 3.2 Axios 实例层（`api/request.ts`）
+
+| 配置项 | 当前值 | 说明 |
+|---|---|---|
+| `baseURL` | `/api` | 通过 Vite proxy 转发到后端 |
+| `timeout` | 15000ms | 超时 15 秒 |
+| Token 来源 | `localStorage.getItem('access_token')` | 请求拦截器自动注入 |
+| 成功判断 | `code === 200 \| 201` | 其余 code 视为业务错误 |
+| 401 | 登录接口 = 账号密码错误；其他 = Token 过期跳转 `/login` | |
+| 403 | 提示"无权限访问" | |
+| 404 | 提示"请求资源不存在" | |
+| 5xx | 提示"服务器错误，请稍后重试" | |
+| 网络失败 | 提示"网络连接失败，请检查网络" | |
+
+### 3.3 业务 API 函数层（`api/[模块].ts`）
+
+| 文件 | 后端 App | 路由前缀 | 职责 |
+|---|---|---|---|
+| `api/auth.ts` | users | `/api/auth/` | 登录、注册、刷新 Token |
+| `api/accounts.ts` | accounts | `/api/accounts/` | 账户 CRUD |
+| `api/transactions.ts` | transactions | `/api/transactions/` | 流水 CRUD |
+| `api/assets.ts` | assets | `/api/assets/` | 资产 CRUD |
+| `api/liabilities.ts` | liabilities | `/api/liabilities/` | 负债记录 |
+| `api/budgets.ts` | budgets | `/api/budgets/` | 月度预算 |
+| `api/goals.ts` | goals | `/api/goals/` | 财务目标 |
+| `api/statistics.ts` | statistics | `/api/statistics/` | 统计数据 |
+
+```typescript
+// ✅ 正确示例
+export function getTransactions(params?: TransactionQuery) {
+  return service.get<ApiResponse<PaginatedResponse<Transaction>>>('/transactions/', { params })
+}
+export function createTransaction(data: Partial<Transaction>) {
+  return service.post<ApiResponse<Transaction>>('/transactions/', data)
+}
+export function updateTransaction(id: number, data: Partial<Transaction>) {
+  return service.put<ApiResponse<Transaction>>(`/transactions/${id}/`, data)
+}
+export function deleteTransaction(id: number) {
+  return service.delete<ApiResponse<null>>(`/transactions/${id}/`)
+}
+```
+
+**强制规则**：
+- 每个函数必须声明泛型返回类型，禁止裸调用不带泛型
+- 查询参数类型（`XxxQuery`）定义在对应 `api/` 文件中
+- URL 路径末尾保留斜杠：`'/transactions/'` ✅
+
+---
+
+## 四、模块分类与维护规范
+
+### 4.1 新增功能时的放置决策树
+
+```
+需要放置新代码？
+├── HTTP 请求函数       → api/[对应模块].ts
+├── 多页面共享状态      → store/useXxxStore.ts
+├── 可复用逻辑（非UI）  → composables/useXxx.ts
+├── 纯函数工具          → utils/format.ts 或 utils/storage.ts
+├── 跨页面 UI 组件
+│   ├── 图表类          → components/charts/XxxChart.vue
+│   └── 其他            → components/XxxComponent.vue
+├── 路由对应页面        → views/XxxView.vue + router/index.ts
+└── TypeScript 实体类型 → types/index.ts
+```
+
+### 4.2 `types/index.ts` 维护规范
+
+```typescript
+export interface ApiResponse<T> {
+  code:    number
+  message: string
+  data:    T
+}
+
+export interface PaginatedResponse<T> {
+  count:    number
+  next:     string | null
+  previous: string | null
+  results:  T[]
+}
+
+export interface Transaction {
+  id:               number
+  account:          number
+  transaction_type: 'income' | 'expense'
+  amount:           string   // DecimalField → string，避免精度丢失
+  category:         string
+  description:      string
+  date:             string
+  created_at:       string
+  updated_at:       string
+}
+```
+
+**维护规则**：
+- 金额字段统一用 `string` 类型，展示时通过 `utils/format.ts` 格式化
+- 禁止使用 `any`
+- 枚举值用联合类型限定：`'income' | 'expense'`
+
+### 4.3 Store 维护规范
+
+- Store 中禁止直接调用 `axios` / `service`，所有请求通过 `api/` 函数发起
+- Store 只存全局共享状态，页面局部状态用组件内 `ref` / `reactive` 管理
+- 持久化数据通过 `localStorage`，key 名在 Store 内统一管理
+
+### 4.4 `utils/` 维护规范
+
+```typescript
+// utils/format.ts
+export function formatAmount(amount: string, currency = '¥'): string {
+  const num = parseFloat(amount)
+  return `${currency}${num.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`
+}
+```
+
+- 所有金额展示必须通过 `formatAmount()` 格式化
+- 纯函数放 `utils/`，有副作用或依赖响应式状态的逻辑放 `composables/`
+- 禁止在 `utils/` 中导入 Vue 相关模块
+
+---
+
+## 五、快速检查清单
+
+### 样式
+- [ ] 组件使用了 `<style scoped>`
+- [ ] 未硬编码颜色值，已引用 `--color-*` 变量
+- [ ] 穿透 Element Plus 使用了 `:deep()` 且有注释
+- [ ] 新增全局样式写在 `global.css` 的正确区块
+- [ ] EP 颜色基调修改走轨道一（`:root` 变量），细粒度修改走轨道二（`!important` 选择器）
+
+### 接口
+- [ ] 新接口函数放在正确的 `api/[模块].ts` 文件
+- [ ] 函数携带泛型返回类型 `service.get<ApiResponse<T>>()`
+- [ ] URL 末尾有斜杠
+- [ ] 组件 / Store 中没有直接调用 `axios` 或 `service`
+
+### 类型
+- [ ] 新实体类型已在 `types/index.ts` 中定义
+- [ ] 金额字段类型为 `string`，非 `number`
+- [ ] 没有使用 `any`
+
+### 模块归属
+- [ ] 新文件放在了正确的目录（参考 4.1 决策树）
+- [ ] 新增后端 App 时，同步创建了 `api/[模块].ts` 和 `types/index.ts` 中的实体类型
+- [ ] Store 只存全局共享状态，局部状态在组件内管理
+- [ ] 图表组件放于 `components/charts/`，已处理 resize 和 dispose
+
+### Element Plus 定制
+- [ ] 颜色类变更优先走 `:root` 的 `--el-*` 变量覆盖
+- [ ] 布局/圆角/间距等细节走 `global.css` Overrides 区块的 `!important` 覆盖
+- [ ] 组件级局部穿透使用 `:deep()`，并附注释说明原因
+- [ ] 未在组件 `<style scoped>` 中直接覆盖 EP 全局类名（无 `:deep()`） 
