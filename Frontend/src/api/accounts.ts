@@ -2,7 +2,7 @@ import service from './request'
 import type { ApiResponse, Account, PaginatedResponse } from '@/types'
 
 export function getAccounts() {
-  return service.get<ApiResponse<PaginatedResponse<Account>>>('/accounts/')
+  return service.get<ApiResponse<Account[]>>('/accounts/')
 }
 
 export function getAccount(id: number) {

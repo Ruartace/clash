@@ -14,7 +14,7 @@ export interface PaginatedResponse<T> {
 
 // ─── Auth / User ─────────────────────────────────────────────────────────────
 export interface LoginPayload {
-  username: string
+  email: string
   password: string
 }
 

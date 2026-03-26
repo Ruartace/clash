@@ -2,7 +2,7 @@ import service from './request'
 import type { ApiResponse, Asset, PaginatedResponse } from '@/types'
 
 export function getAssets() {
-  return service.get<ApiResponse<PaginatedResponse<Asset>>>('/assets/')
+  return service.get<ApiResponse<Asset[]>>('/assets/')
 }
 
 export function getAsset(id: number) {

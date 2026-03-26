@@ -2,7 +2,7 @@ import service from './request'
 import type { ApiResponse, Budget, PaginatedResponse } from '@/types'
 
 export function getBudgets(month?: string) {
-  return service.get<ApiResponse<PaginatedResponse<Budget>>>('/budgets/', {
+  return service.get<ApiResponse<Budget[]>>('/budgets/', {
     params: month ? { month } : undefined,
   })
 }

@@ -4,16 +4,19 @@ import { getMonthlySummary, getCategoryBreakdown, getNetWorth } from '@/api/stat
 import { formatCurrency } from '@/utils/format'
 
 const netWorth = ref({ net_worth: '0', total_assets: '0', total_liabilities: '0' })
-const monthlySummary = ref<{ month: string; income: string; expense: string; net: string }[]>([])
-const categoryBreakdown = ref<{ category: string; total: string; percentage: string }[]>([])
+const monthlySummary = ref<{ year: number; month: number; income: string; expense: string; balance: string }[]>([])
+const categoryBreakdown = ref<{ category: string; amount: string }[]>([])
 const loading = ref(true)
+
+const currentYear = new Date().getFullYear()
+const currentMonth = new Date().getMonth() + 1
 
 onMounted(async () => {
   try {
     await Promise.all([
       getNetWorth().then((r) => { netWorth.value = r.data.data }),
-      getMonthlySummary().then((r) => { monthlySummary.value = r.data.data }),
-      getCategoryBreakdown({ transaction_type: 'expense' }).then((r) => { categoryBreakdown.value = r.data.data }),
+      getMonthlySummary().then((r) => { monthlySummary.value = r.data.data as unknown as typeof monthlySummary.value }),
+      getCategoryBreakdown({ year: currentYear, month: currentMonth }).then((r) => { categoryBreakdown.value = r.data.data as unknown as typeof categoryBreakdown.value }),
     ])
   } finally {
     loading.value = false
@@ -46,9 +49,11 @@ onMounted(async () => {
     <div class="charts-row">
       <!-- Monthly income/expense table -->
       <section class="section">
-        <h2 class="section-title">月度收支</h2>
+        <h2 class="section-title">月度收支（{{ currentYear }}年）</h2>
         <el-table :data="monthlySummary" style="width:100%" size="small">
-          <el-table-column prop="month" label="月份" width="100" />
+          <el-table-column label="月份" width="80">
+            <template #default="{ row }">{{ row.month }}月</template>
+          </el-table-column>
           <el-table-column label="收入">
             <template #default="{ row }">
               <span class="income">{{ formatCurrency(row.income) }}</span>
@@ -61,8 +66,8 @@ onMounted(async () => {
           </el-table-column>
           <el-table-column label="净额">
             <template #default="{ row }">
-              <span :class="parseFloat(row.net) >= 0 ? 'income' : 'expense'">
-                {{ formatCurrency(row.net) }}
+              <span :class="parseFloat(row.balance) >= 0 ? 'income' : 'expense'">
+                {{ formatCurrency(row.balance) }}
               </span>
             </template>
           </el-table-column>
@@ -71,21 +76,14 @@ onMounted(async () => {
 
       <!-- Category breakdown -->
       <section class="section">
-        <h2 class="section-title">支出分类</h2>
+        <h2 class="section-title">本月支出分类</h2>
         <div v-if="categoryBreakdown.length === 0 && !loading" class="empty">暂无数据</div>
         <div class="category-list">
           <div v-for="c in categoryBreakdown" :key="c.category" class="category-item">
             <div class="category-row">
               <span class="category-name">{{ c.category }}</span>
-              <span class="category-pct">{{ c.percentage }}%</span>
-              <span class="category-amount">{{ formatCurrency(c.total) }}</span>
+              <span class="category-amount">{{ formatCurrency(c.amount) }}</span>
             </div>
-            <el-progress
-              :percentage="parseFloat(c.percentage)"
-              :show-text="false"
-              :stroke-width="5"
-              status="exception"
-            />
           </div>
         </div>
       </section>
@@ -133,11 +131,9 @@ onMounted(async () => {
 .expense { color: var(--color-expense); font-family: var(--font-mono); font-weight: 600; }
 
 .category-list { display: flex; flex-direction: column; gap: 12px; }
-.category-item {}
-.category-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.category-row { display: flex; align-items: center; gap: 8px; }
 .category-name { flex: 1; font-size: 13px; color: var(--color-text-primary); }
-.category-pct { font-size: 12px; color: var(--color-text-muted); width: 36px; text-align: right; }
-.category-amount { font-size: 13px; font-family: var(--font-mono); color: var(--color-expense); width: 100px; text-align: right; }
+.category-amount { font-size: 13px; font-family: var(--font-mono); color: var(--color-expense); }
 .empty { color: var(--color-text-muted); font-size: 14px; padding: 20px; }
 
 @media (max-width: 768px) {

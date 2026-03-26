@@ -9,13 +9,13 @@ const authStore = useAuthStore()
 const loading = ref(false)
 
 const form = reactive({
-  username: '',
+  email: '',
   password: '',
 })
 
 async function handleLogin() {
-  if (!form.username || !form.password) {
-    ElMessage.warning('请输入用户名和密码')
+  if (!form.email || !form.password) {
+    ElMessage.warning('请输入邮箱和密码')
     return
   }
   loading.value = true
@@ -44,11 +44,11 @@ async function handleLogin() {
       <el-form :model="form" class="login-form" @submit.prevent="handleLogin">
         <el-form-item>
           <el-input
-            v-model="form.username"
-            placeholder="用户名"
+            v-model="form.email"
+            placeholder="邮箱"
             size="large"
-            :prefix-icon="'User'"
-            autocomplete="username"
+            :prefix-icon="'Message'"
+            autocomplete="email"
           />
         </el-form-item>
         <el-form-item>
@@ -73,6 +73,11 @@ async function handleLogin() {
           登 录
         </el-button>
       </el-form>
+
+      <p class="register-link">
+        没有账户？
+        <router-link :to="{ name: 'register' }">立即注册</router-link>
+      </p>
     </div>
   </div>
 </template>
@@ -178,5 +183,22 @@ async function handleLogin() {
 .login-btn:hover {
   background: var(--color-accent-hover);
   border-color: var(--color-accent-hover);
+}
+
+.register-link {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.register-link a {
+  color: var(--color-accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.register-link a:hover {
+  text-decoration: underline;
 }
 </style>

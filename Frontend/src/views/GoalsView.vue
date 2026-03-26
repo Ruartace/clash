@@ -22,7 +22,7 @@ async function fetchData() {
   loading.value = true
   try {
     const res = await getGoals()
-    goals.value = res.data.data.results
+    goals.value = res.data.data
   } finally {
     loading.value = false
   }

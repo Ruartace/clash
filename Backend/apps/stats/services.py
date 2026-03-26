@@ -50,6 +50,15 @@ def get_monthly_summary(user, year: int, month: int) -> dict:
     }
 
 
+def get_yearly_summary(user, year: int) -> list:
+    """获取指定年份全年各月收支汇总"""
+    result = []
+    for month in range(1, 13):
+        data = get_monthly_summary(user, year, month)
+        result.append(data)
+    return result
+
+
 def get_expense_by_category(user, year: int, month: int) -> list:
     """获取指定月份各分类支出占比"""
     qs = Transaction.objects.filter(

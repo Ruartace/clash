@@ -12,7 +12,7 @@ export interface TransactionQuery {
 }
 
 export function getTransactions(params?: TransactionQuery) {
-  return service.get<ApiResponse<PaginatedResponse<Transaction>>>('/transactions/', { params })
+  return service.get<ApiResponse<Transaction[]>>('/transactions/', { params })
 }
 
 export function getTransaction(id: number) {

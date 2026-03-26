@@ -7,8 +7,8 @@ export function getMonthlySummary(year?: number) {
   })
 }
 
-export function getCategoryBreakdown(params?: { month?: string; transaction_type?: string }) {
-  return service.get<ApiResponse<CategoryBreakdown[]>>('/statistics/category/', { params })
+export function getCategoryBreakdown(params?: { year?: number; month?: number }) {
+  return service.get<ApiResponse<CategoryBreakdown[]>>('/statistics/expense-by-category/', { params })
 }
 
 export function getNetWorth() {

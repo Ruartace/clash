@@ -11,7 +11,7 @@ export const useAccountStore = defineStore('account', () => {
     loading.value = true
     try {
       const res = await getAccounts()
-      accounts.value = res.data.data.results
+      accounts.value = res.data.data
     } finally {
       loading.value = false
     }

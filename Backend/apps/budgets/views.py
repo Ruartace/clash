@@ -12,6 +12,11 @@ class BudgetListCreateView(APIView):
     def get(self, request):
         year = request.query_params.get('year')
         month = request.query_params.get('month')
+        # 支持 month=YYYY-MM 格式
+        if month and '-' in month:
+            parts = month.split('-')
+            year = parts[0]
+            month = parts[1]
         items = services.get_user_budgets(
             request.user,
             year=int(year) if year else None,

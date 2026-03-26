@@ -30,9 +30,9 @@ async function fetchData() {
       getTransactions({ page: page.value }),
       getAccounts(),
     ])
-    transactions.value = txRes.data.data.results
-    total.value = txRes.data.data.count
-    accounts.value = accRes.data.data.results
+    transactions.value = txRes.data.data
+    total.value = transactions.value.length
+    accounts.value = accRes.data.data
   } finally {
     loading.value = false
   }

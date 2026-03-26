@@ -10,7 +10,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function doLogin(payload: LoginPayload) {
     const res = await login(payload)
-    const { access, refresh } = res.data.data
+    // simplejwt 直接返回 { access, refresh }，无外层 data 包装
+    const { access, refresh } = res.data as unknown as { access: string; refresh: string }
     storage.setTokens(access, refresh)
     isAuthenticated.value = true
     await fetchProfile()

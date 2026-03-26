@@ -32,7 +32,7 @@ async function fetchData() {
   loading.value = true
   try {
     const res = await getLiabilities()
-    liabilities.value = res.data.data.results
+    liabilities.value = res.data.data
   } finally {
     loading.value = false
   }

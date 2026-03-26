@@ -2,7 +2,7 @@ import service from './request'
 import type { ApiResponse, Goal, PaginatedResponse } from '@/types'
 
 export function getGoals() {
-  return service.get<ApiResponse<PaginatedResponse<Goal>>>('/goals/')
+  return service.get<ApiResponse<Goal[]>>('/goals/')
 }
 
 export function getGoal(id: number) {

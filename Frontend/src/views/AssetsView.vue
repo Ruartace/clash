@@ -32,7 +32,7 @@ async function fetchAssets() {
   loading.value = true
   try {
     const res = await getAssets()
-    assets.value = res.data.data.results
+    assets.value = res.data.data
   } finally {
     loading.value = false
   }

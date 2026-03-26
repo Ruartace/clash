@@ -23,7 +23,7 @@ async function fetchData() {
   loading.value = true
   try {
     const res = await getBudgets(selectedMonth.value)
-    budgets.value = res.data.data.results
+    budgets.value = res.data.data
   } finally {
     loading.value = false
   }

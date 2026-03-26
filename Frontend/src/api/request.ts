@@ -26,7 +26,8 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   (response: AxiosResponse<ApiResponse<unknown>>) => {
     const { data } = response
-    if (data.code !== undefined && data.code !== 200) {
+    // 允许 200 和 201，其他业务 code 视为错误
+    if (data.code !== undefined && data.code !== 200 && data.code !== 201) {
       ElMessage.error(data.message || '请求失败')
       return Promise.reject(new Error(data.message))
     }
