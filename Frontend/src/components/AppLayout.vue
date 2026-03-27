@@ -277,6 +277,16 @@ async function handleLogout() {
 .main-content {
   flex: 1;
   overflow-y: auto;
-  padding: 28px 32px;
+  /* 动态内边距：小屏紧凑，大屏适度呼吸 */
+  padding: 20px 16px 24px;
+}
+@media (min-width: 768px) {
+  .main-content { padding: 24px 24px 28px; }
+}
+@media (min-width: 1280px) {
+  .main-content { padding: 28px 32px 32px; }
+}
+@media (min-width: 1600px) {
+  .main-content { padding: 28px 40px 32px; }
 }
 </style>

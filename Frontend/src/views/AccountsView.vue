@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { useAccountStore } from '@/store/useAccountStore'
 import { createAccount, updateAccount } from '@/api/accounts'
@@ -7,7 +7,12 @@ import { ElMessage } from 'element-plus'
 import type { Account } from '@/types'
 
 const store = useAccountStore()
-onMounted(() => store.fetchAccounts())
+const visible = ref(false)
+
+onMounted(async () => {
+  await store.fetchAccounts()
+  requestAnimationFrame(() => { visible.value = true })
+})
 
 const dialogVisible = ref(false)
 const editingId = ref<number | null>(null)
@@ -34,7 +39,6 @@ const accountTypeMap = computed(() =>
   Object.fromEntries(accountTypes.map(t => [t.value, t.label]))
 )
 
-// Icon map per account type
 const accountTypeIcon: Record<string, string> = {
   cash:        '💵',
   debit_card:  '🏦',
@@ -45,7 +49,6 @@ const accountTypeIcon: Record<string, string> = {
   other:       '🗂️',
 }
 
-// Summary stats
 const totalBalance = computed(() =>
   store.accounts.reduce((sum, a) => sum + parseFloat(a.balance || '0'), 0)
 )
@@ -86,15 +89,16 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="accounts-page">
+  <div class="accounts-page" :class="{ 'is-visible': visible }">
+
     <!-- ── Page Header ── -->
     <header class="page-header">
-      <div class="header-text">
-        <h1 class="page-title">账户管理</h1>
-        <p class="page-subtitle">管理您的所有资金账户</p>
+      <div class="header-left">
+        <p class="page-eyebrow">CLASH · FINANCIAL OS</p>
+        <h1 class="page-title">账户管理<span class="gold-dot">.</span></h1>
       </div>
       <el-button type="primary" class="btn-add" @click="openCreate">
-        <span class="btn-icon">＋</span> 新增账户
+        ＋ 新增账户
       </el-button>
     </header>
 
@@ -107,22 +111,24 @@ async function handleSubmit() {
       <div class="summary-divider" />
       <div class="summary-item">
         <span class="summary-label">资产合计（CNY）</span>
-        <span class="summary-value accent">
-          {{ formatCurrency(String(totalBalance), 'CNY') }}
-        </span>
+        <span class="summary-value accent">{{ formatCurrency(String(totalBalance), 'CNY') }}</span>
       </div>
+      <div class="summary-glow"></div>
     </section>
 
-    <!-- ── Card Grid (responsive) ── -->
+    <!-- ── Card Grid ── -->
     <div v-if="!store.loading && store.accounts.length > 0" class="card-grid">
       <div
-        v-for="account in store.accounts"
+        v-for="(account, i) in store.accounts"
         :key="account.id"
         class="account-card"
+        :style="{ animationDelay: `${i * 60}ms` }"
         @click="openEdit(account)"
       >
         <div class="card-top">
-          <span class="type-icon">{{ accountTypeIcon[account.account_type] ?? '🗂️' }}</span>
+          <div class="card-icon-wrap">
+            <span class="type-icon">{{ accountTypeIcon[account.account_type] ?? '🗂️' }}</span>
+          </div>
           <span class="type-badge">{{ accountTypeMap[account.account_type] ?? account.account_type }}</span>
         </div>
         <div class="card-name">{{ account.name }}</div>
@@ -131,29 +137,30 @@ async function handleSubmit() {
           <span class="card-currency">{{ account.currency }}</span>
           <span class="card-edit-hint">点击编辑 →</span>
         </div>
+        <div class="card-bar"><div class="card-bar-fill"></div></div>
       </div>
 
-      <!-- Add new card placeholder -->
+      <!-- Add placeholder -->
       <div class="account-card card-add" @click="openCreate">
         <span class="add-icon">＋</span>
         <span class="add-label">新增账户</span>
       </div>
     </div>
 
-    <!-- ── Empty State ── -->
-    <div v-else-if="!store.loading" class="empty-state">
-      <div class="empty-icon">🏦</div>
-      <p class="empty-text">还没有账户，点击新增开始记账</p>
-      <el-button type="primary" @click="openCreate">+ 新增账户</el-button>
-    </div>
-
-    <!-- ── Skeleton while loading ── -->
+    <!-- ── Skeleton ── -->
     <div v-if="store.loading" class="card-grid">
       <div v-for="n in 4" :key="n" class="account-card skeleton">
         <div class="sk-line sk-short" />
         <div class="sk-line sk-long" />
         <div class="sk-line sk-medium" />
       </div>
+    </div>
+
+    <!-- ── Empty State ── -->
+    <div v-if="!store.loading && store.accounts.length === 0" class="empty-state">
+      <div class="empty-icon">🏦</div>
+      <p class="empty-text">还没有账户，点击新增开始记账</p>
+      <el-button type="primary" @click="openCreate">＋ 新增账户</el-button>
     </div>
 
     <!-- ── Dialog ── -->
@@ -170,12 +177,7 @@ async function handleSubmit() {
         </el-form-item>
         <el-form-item label="账户类型">
           <el-select v-model="form.account_type" style="width: 100%">
-            <el-option
-              v-for="t in accountTypes"
-              :key="t.value"
-              :label="t.label"
-              :value="t.value"
-            />
+            <el-option v-for="t in accountTypes" :key="t.value" :label="t.label" :value="t.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="初始余额">
@@ -198,95 +200,131 @@ async function handleSubmit() {
         </div>
       </template>
     </el-dialog>
+
   </div>
 </template>
 
 <style scoped>
-/* ── Page Shell ── */
+/* ── Base ─────────────────────────────────────────────────────────────── */
 .accounts-page {
   width: 100%;
-  max-width: 1100px;
-  padding: 0 4px;
-  box-sizing: border-box;
+  max-width: 100%;
+  padding: 0 0 24px;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.accounts-page.is-visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
-/* ── Header ── */
+/* ── Header ───────────────────────────────────────────────────────────── */
 .page-header {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+}
+.header-left {
+  display: flex;
+  flex-direction: column;
+}
+.page-eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: var(--color-accent-dim);
+  font-family: var(--font-mono);
+  margin-bottom: 4px;
+  text-transform: uppercase;
 }
 .page-title {
-  font-size: clamp(20px, 3vw, 26px);
+  font-size: clamp(28px, 3vw, 38px);
   font-weight: 700;
   color: var(--color-text-primary);
-  letter-spacing: -0.3px;
+  line-height: 1.15;
 }
-.page-subtitle {
-  font-size: 13px;
-  color: var(--color-text-muted);
-  margin-top: 4px;
+.gold-dot {
+  color: var(--color-accent);
+  font-size: 1.3em;
+  line-height: 0;
+  vertical-align: -2px;
+  margin-left: 2px;
 }
 .btn-add {
   white-space: nowrap;
   flex-shrink: 0;
-}
-.btn-icon {
-  font-size: 16px;
-  margin-right: 4px;
-  font-style: normal;
+  align-self: flex-end;
 }
 
 /* ── Summary Bar ── */
 .summary-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 32px;
-  padding: 16px 24px;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  margin-bottom: 24px;
+  padding: 20px 28px;
+  background: linear-gradient(135deg, var(--color-bg-card) 0%, rgba(200,173,126,0.07) 100%);
+  border: 1px solid var(--color-border-gold);
+  border-radius: var(--radius-lg);
+  margin-bottom: 20px;
   flex-wrap: wrap;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
 }
 .summary-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 .summary-label {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: var(--color-text-muted);
+  font-family: var(--font-mono);
 }
 .summary-value {
-  font-size: 22px;
+  font-size: 32px;
   font-weight: 700;
   font-family: var(--font-mono);
   color: var(--color-text-primary);
+  line-height: 1;
+  letter-spacing: -0.02em;
 }
 .summary-value.accent {
   color: var(--color-accent);
 }
 .summary-divider {
   width: 1px;
-  height: 36px;
+  height: 40px;
   background: var(--color-border);
   flex-shrink: 0;
 }
-
-/* ── Card Grid ── */
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 16px;
+.summary-glow {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+  animation: shimmer-line 3.5s ease-in-out infinite;
+}
+@keyframes shimmer-line {
+  0%, 100% { opacity: 0.2; transform: scaleX(0.5); }
+  50%       { opacity: 0.6; transform: scaleX(1); }
 }
 
-/* ── Account Card ── */
+/* ── Card Grid ────────────────────────────────────────────────────────── */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+/* ── Account Card ─────────────────────────────────────────────────────── */
 .account-card {
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
@@ -296,16 +334,23 @@ async function handleSubmit() {
   flex-direction: column;
   gap: 10px;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
   transition:
     border-color var(--transition-base),
     box-shadow var(--transition-base),
     transform var(--transition-base);
   box-shadow: var(--shadow-card);
+  animation: card-in 0.5s ease both;
 }
 .account-card:hover {
-  border-color: var(--color-accent);
+  border-color: var(--color-border-gold);
   box-shadow: var(--shadow-gold);
   transform: translateY(-2px);
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .card-top {
@@ -313,22 +358,34 @@ async function handleSubmit() {
   align-items: center;
   justify-content: space-between;
 }
+.card-icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle);
+  border: 1px solid var(--color-border-gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
 .type-icon {
-  font-size: 22px;
+  font-size: 20px;
   line-height: 1;
 }
 .type-badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 20px;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
   background: var(--color-accent-subtle);
   color: var(--color-accent);
   border: 1px solid var(--color-border-gold);
+  font-family: var(--font-mono);
   white-space: nowrap;
 }
 
 .card-name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--color-text-primary);
   white-space: nowrap;
@@ -338,10 +395,11 @@ async function handleSubmit() {
 
 .card-balance {
   font-family: var(--font-mono);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   color: var(--color-accent);
-  letter-spacing: -0.5px;
+  letter-spacing: -0.02em;
+  line-height: 1;
 }
 
 .card-footer {
@@ -349,16 +407,19 @@ async function handleSubmit() {
   align-items: center;
   justify-content: space-between;
   margin-top: auto;
-  padding-top: 8px;
+  padding-top: 10px;
   border-top: 1px solid var(--color-border);
 }
 .card-currency {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-muted);
   font-family: var(--font-mono);
+  background: var(--color-bg-hover);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
 }
 .card-edit-hint {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-muted);
   opacity: 0;
   transition: opacity var(--transition-fast);
@@ -368,6 +429,24 @@ async function handleSubmit() {
   color: var(--color-accent-dim);
 }
 
+.card-bar {
+  height: 2px;
+  background: var(--color-bg-hover);
+  border-radius: 1px;
+  overflow: hidden;
+  margin-top: -4px;
+}
+.card-bar-fill {
+  height: 100%;
+  width: 65%;
+  background: linear-gradient(90deg, var(--color-accent-dim), var(--color-accent));
+  border-radius: 1px;
+  animation: bar-fill 1.2s cubic-bezier(0.4,0,0.2,1) both;
+}
+@keyframes bar-fill {
+  from { width: 0; }
+}
+
 /* ── Add Card Placeholder ── */
 .card-add {
   border-style: dashed;
@@ -375,8 +454,9 @@ async function handleSubmit() {
   background: transparent;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 140px;
+  gap: 10px;
+  min-height: 160px;
+  animation: none;
 }
 .card-add:hover {
   border-color: var(--color-accent);
@@ -385,13 +465,13 @@ async function handleSubmit() {
   transform: none;
 }
 .add-icon {
-  font-size: 28px;
+  font-size: 32px;
   color: var(--color-text-muted);
   line-height: 1;
   transition: color var(--transition-fast);
 }
 .add-label {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--color-text-muted);
   transition: color var(--transition-fast);
 }
@@ -426,11 +506,11 @@ async function handleSubmit() {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  padding: 72px 24px;
+  padding: 80px 24px;
   color: var(--color-text-muted);
 }
 .empty-icon { font-size: 48px; line-height: 1; }
-.empty-text { font-size: 14px; }
+.empty-text { font-size: 16px; }
 
 /* ── Dialog ── */
 .dialog-form {
@@ -442,26 +522,43 @@ async function handleSubmit() {
   gap: 10px;
 }
 
-/* ── Responsive overrides ── */
-@media (max-width: 480px) {
+/* 鈹€鈹€ Responsive 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+@media (max-width: 1080px) {
+  .card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+}
+@media (max-width: 640px) {
   .summary-bar {
     gap: 16px;
-    padding: 14px 16px;
+    padding: 16px 18px;
   }
   .summary-value {
-    font-size: 18px;
+    font-size: 24px;
   }
   .card-grid {
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: 10px;
   }
   .card-balance {
-    font-size: 18px;
+    font-size: 20px;
+  }
+  .page-title {
+    font-size: clamp(24px, 5vw, 32px);
   }
 }
-@media (max-width: 340px) {
+@media (max-width: 420px) {
   .card-grid {
     grid-template-columns: 1fr;
+  }
+  .summary-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .summary-divider {
+    width: 100%;
+    height: 1px;
   }
 }
 </style>

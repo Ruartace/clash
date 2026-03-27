@@ -93,6 +93,8 @@
 html, body {
   height: 100%;
   font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
