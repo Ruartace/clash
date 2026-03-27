@@ -63,6 +63,21 @@ const routes: RouteRecordRaw[] = [
         name: 'statistics',
         component: () => import('@/views/StatisticsView.vue'),
       },
+      {
+        path: 'flow',
+        name: 'flow',
+        component: () => import('@/views/FlowView.vue'),
+      },
+      {
+        path: 'heatmap',
+        name: 'heatmap',
+        component: () => import('@/views/HeatmapView.vue'),
+      },
+      {
+        path: 'network',
+        name: 'network',
+        component: () => import('@/views/NetworkView.vue'),
+      },
     ],
   },
   {

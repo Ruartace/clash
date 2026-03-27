@@ -15,6 +15,9 @@ db.sqlite3
 staticfiles/
 mediafiles/
 
+# SQLite data directory
+data/*.sqlite3
+
 # Environment
 .env
 .venv/
