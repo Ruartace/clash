@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import * as d3Force from 'd3-force'
-import { CHART_COLORS } from '@/assets/styles/chart-theme'
+import { ElMessage } from 'element-plus'
 
-// ── Types ────────────────────────────────────────────────────────────────────
+import { CHART_COLORS } from '@/assets/styles/chart-theme'
+import { createFlowRecord, getFlowGraph } from '@/api/statistics'
+import { formatCurrency } from '@/utils/format'
+
 interface FlowNode extends d3Force.SimulationNodeDatum {
   id: string
   label: string
-  type: 'account' | 'income' | 'expense'
+  type: 'account' | 'income' | 'expense' | 'asset' | 'liability' | 'goal'
   value: number
   x?: number
   y?: number
@@ -20,152 +23,118 @@ interface FlowLink extends d3Force.SimulationLinkDatum<FlowNode> {
   label: string
 }
 
-// ── Mock data (replace with real API when ready) ─────────────────────────────
-const RAW_NODES: FlowNode[] = [
-  { id: 'salary',    label: '工资收入',   type: 'income',  value: 18000 },
-  { id: 'freelance', label: '自由职业',   type: 'income',  value: 4500  },
-  { id: 'invest',    label: '投资收益',   type: 'income',  value: 2200  },
-  { id: 'checking',  label: '活期账户',   type: 'account', value: 12000 },
-  { id: 'savings',   label: '储蓄账户',   type: 'account', value: 30000 },
-  { id: 'rent',      label: '房租',       type: 'expense', value: 4200  },
-  { id: 'food',      label: '餐饮',       type: 'expense', value: 2100  },
-  { id: 'transport', label: '交通',       type: 'expense', value: 800   },
-  { id: 'shopping',  label: '购物',       type: 'expense', value: 1500  },
-  { id: 'utility',   label: '水电',       type: 'expense', value: 600   },
-  { id: 'health',    label: '医疗',       type: 'expense', value: 900   },
-]
+const loading = ref(false)
+const visible = ref(false)
+const year = ref(new Date().getFullYear())
+const month = ref(new Date().getMonth() + 1)
 
-const RAW_LINKS: FlowLink[] = [
-  { source: 'salary',    target: 'checking',  amount: 18000, label: '¥18,000' },
-  { source: 'freelance', target: 'checking',  amount: 4500,  label: '¥4,500'  },
-  { source: 'invest',    target: 'savings',   amount: 2200,  label: '¥2,200'  },
-  { source: 'checking',  target: 'savings',   amount: 5000,  label: '¥5,000'  },
-  { source: 'checking',  target: 'rent',      amount: 4200,  label: '¥4,200'  },
-  { source: 'checking',  target: 'food',      amount: 2100,  label: '¥2,100'  },
-  { source: 'checking',  target: 'transport', amount: 800,   label: '¥800'    },
-  { source: 'checking',  target: 'shopping',  amount: 1500,  label: '¥1,500'  },
-  { source: 'savings',   target: 'utility',   amount: 600,   label: '¥600'    },
-  { source: 'savings',   target: 'health',    amount: 900,   label: '¥900'    },
-]
+const statsTotal = ref({ income: 0, expense: 0, flow: 0 })
+const nodes = ref<FlowNode[]>([])
+const links = ref<FlowLink[]>([])
 
-// ── Canvas / Sim state ───────────────────────────────────────────────────────
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const containerEl = ref<HTMLDivElement | null>(null)
 const tooltip = ref({ visible: false, x: 0, y: 0, text: '', sub: '' })
-const statsTotal = ref({ income: 0, expense: 0, flow: 0 })
+
+const dialogVisible = ref(false)
+const submitting = ref(false)
+const form = ref({
+  source_name: '',
+  source_type: 'income' as FlowNode['type'],
+  target_name: '',
+  target_type: 'account' as FlowNode['type'],
+  amount: '',
+  flow_date: '',
+  description: '',
+})
+
+const typeOptions = [
+  { label: '收入', value: 'income' },
+  { label: '账户', value: 'account' },
+  { label: '支出', value: 'expense' },
+  { label: '资产', value: 'asset' },
+  { label: '负债', value: 'liability' },
+  { label: '目标', value: 'goal' },
+]
 
 let simulation: d3Force.Simulation<FlowNode, FlowLink> | null = null
 let animationId = 0
 let dpr = 1
-let W = 0, H = 0
-
-const nodes: FlowNode[] = RAW_NODES.map(n => ({ ...n }))
-const links: FlowLink[] = RAW_LINKS.map(l => ({ ...l }))
-
-// compute stats
-statsTotal.value.income  = nodes.filter(n => n.type === 'income').reduce((s, n) => s + n.value, 0)
-statsTotal.value.expense = nodes.filter(n => n.type === 'expense').reduce((s, n) => s + n.value, 0)
-statsTotal.value.flow    = links.reduce((s, l) => s + l.amount, 0)
+let W = 0
+let H = 0
 
 const nodeRadius = (n: FlowNode) => {
-  const base = Math.sqrt(n.value / 100)
-  return Math.max(28, Math.min(54, base))
+  const base = Math.sqrt(Math.max(1, n.value) / 120)
+  return Math.max(20, Math.min(52, base))
 }
 
 const nodeColor = (type: FlowNode['type']) => {
-  if (type === 'income')  return CHART_COLORS.income
+  if (type === 'income') return CHART_COLORS.income
   if (type === 'expense') return CHART_COLORS.expense
-  return CHART_COLORS.primary
+  if (type === 'asset') return '#34d399'
+  if (type === 'liability') return '#f87171'
+  if (type === 'goal') return '#a78bfa'
+  return '#60a5fa'
 }
 
 function draw() {
   const canvas = canvasEl.value
   if (!canvas) return
-  const ctx = canvas.getContext('2d')!
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
   ctx.clearRect(0, 0, W * dpr, H * dpr)
   ctx.save()
   ctx.scale(dpr, dpr)
 
-  // Draw links
-  for (const link of links) {
+  for (const link of links.value) {
     const s = link.source as FlowNode
     const t = link.target as FlowNode
     if (s.x == null || t.x == null) continue
 
     const dx = t.x - s.x
-    const dy = t.y! - s.y!
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    const ux = dx / dist, uy = dy / dist
-    const sr = nodeRadius(s), tr = nodeRadius(t)
+    const dy = (t.y || 0) - (s.y || 0)
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1
+    const ux = dx / dist
+    const uy = dy / dist
+    const x1 = s.x + ux * nodeRadius(s)
+    const y1 = (s.y || 0) + uy * nodeRadius(s)
+    const x2 = (t.x || 0) - ux * nodeRadius(t)
+    const y2 = (t.y || 0) - uy * nodeRadius(t)
 
-    const x1 = s.x + ux * sr, y1 = s.y! + uy * sr
-    const x2 = t.x! - ux * tr, y2 = t.y! - uy * tr
-
-    // glow line
-    const maxAmt = Math.max(...links.map(l => l.amount))
+    const maxAmt = Math.max(1, ...links.value.map((l) => l.amount))
     const lineW = 1 + (link.amount / maxAmt) * 4
-    const alpha = 0.25 + (link.amount / maxAmt) * 0.55
 
     ctx.beginPath()
     ctx.moveTo(x1, y1)
     ctx.lineTo(x2, y2)
-    ctx.strokeStyle = `rgba(200,173,126,${alpha})`
+    ctx.strokeStyle = 'rgba(200,173,126,0.45)'
     ctx.lineWidth = lineW
-    ctx.shadowColor = '#c8ad7e'
-    ctx.shadowBlur = 6
     ctx.stroke()
-    ctx.shadowBlur = 0
-
-    // arrowhead
-    const angle = Math.atan2(y2 - y1, x2 - x1)
-    const aw = 8
-    ctx.beginPath()
-    ctx.moveTo(x2, y2)
-    ctx.lineTo(x2 - aw * Math.cos(angle - 0.4), y2 - aw * Math.sin(angle - 0.4))
-    ctx.lineTo(x2 - aw * Math.cos(angle + 0.4), y2 - aw * Math.sin(angle + 0.4))
-    ctx.closePath()
-    ctx.fillStyle = `rgba(200,173,126,${alpha + 0.2})`
-    ctx.fill()
   }
 
-  // Draw nodes
-  for (const node of nodes) {
-    if (node.x == null) continue
+  for (const node of nodes.value) {
+    if (node.x == null || node.y == null) continue
     const r = nodeRadius(node)
     const color = nodeColor(node.type)
 
-    // Outer glow ring
-    const grad = ctx.createRadialGradient(node.x, node.y!, r * 0.3, node.x, node.y!, r * 1.6)
-    grad.addColorStop(0, color + '33')
-    grad.addColorStop(1, 'transparent')
     ctx.beginPath()
-    ctx.arc(node.x, node.y!, r * 1.6, 0, Math.PI * 2)
-    ctx.fillStyle = grad
-    ctx.fill()
-
-    // Node circle
-    ctx.beginPath()
-    ctx.arc(node.x, node.y!, r, 0, Math.PI * 2)
+    ctx.arc(node.x, node.y, r, 0, Math.PI * 2)
     ctx.fillStyle = '#1e1d1b'
     ctx.fill()
     ctx.strokeStyle = color
     ctx.lineWidth = 2
-    ctx.shadowColor = color
-    ctx.shadowBlur = 14
     ctx.stroke()
-    ctx.shadowBlur = 0
 
-    // Label
     ctx.fillStyle = '#bfbebf'
-    ctx.font = `500 11px 'DM Sans', sans-serif`
+    ctx.font = "500 11px 'DM Sans', sans-serif"
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(node.label, node.x, node.y! - 5)
+    ctx.fillText(node.label, node.x, node.y - 4)
 
-    // Amount
     ctx.fillStyle = color
-    ctx.font = `600 10px 'DM Sans', sans-serif`
-    ctx.fillText(`¥${(node.value / 1000).toFixed(1)}k`, node.x, node.y! + 8)
+    ctx.font = "600 10px 'DM Sans', sans-serif"
+    ctx.fillText(`¥${Math.round(node.value).toLocaleString('zh-CN')}`, node.x, node.y + 9)
   }
 
   ctx.restore()
@@ -185,12 +154,13 @@ function initSim() {
   canvas.style.width = `${W}px`
   canvas.style.height = `${H}px`
 
+  simulation?.stop()
   simulation = d3Force
-    .forceSimulation<FlowNode>(nodes)
-    .force('link', d3Force.forceLink<FlowNode, FlowLink>(links).id(d => d.id).distance(160).strength(0.4))
-    .force('charge', d3Force.forceManyBody().strength(-600))
+    .forceSimulation<FlowNode>(nodes.value)
+    .force('link', d3Force.forceLink<FlowNode, FlowLink>(links.value).id((d) => d.id).distance(140).strength(0.45))
+    .force('charge', d3Force.forceManyBody().strength(-520))
     .force('center', d3Force.forceCenter(W / 2, H / 2))
-    .force('collision', d3Force.forceCollide<FlowNode>().radius(d => nodeRadius(d) + 20))
+    .force('collision', d3Force.forceCollide<FlowNode>().radius((d) => nodeRadius(d) + 14))
     .on('tick', () => {})
 
   cancelAnimationFrame(animationId)
@@ -204,17 +174,18 @@ function handleMouseMove(e: MouseEvent) {
   const mx = e.clientX - rect.left
   const my = e.clientY - rect.top
 
-  for (const node of nodes) {
-    if (node.x == null) continue
+  for (const node of nodes.value) {
+    if (node.x == null || node.y == null) continue
     const r = nodeRadius(node)
-    const dx = mx - node.x, dy = my - node.y!
+    const dx = mx - node.x
+    const dy = my - node.y
     if (dx * dx + dy * dy < r * r) {
       tooltip.value = {
         visible: true,
         x: e.clientX,
-        y: e.clientY - 60,
+        y: e.clientY - 56,
         text: node.label,
-        sub: `¥${node.value.toLocaleString('zh-CN')}`,
+        sub: formatCurrency(String(node.value)),
       }
       return
     }
@@ -222,13 +193,44 @@ function handleMouseMove(e: MouseEvent) {
   tooltip.value.visible = false
 }
 
+async function fetchFlowGraph() {
+  loading.value = true
+  try {
+    const res = await getFlowGraph({ year: year.value, month: month.value })
+    const data = res.data.data
+    nodes.value = data.nodes.map((n) => ({ ...n }))
+    links.value = data.links.map((l) => ({ ...l }))
+    statsTotal.value = data.summary
+    requestAnimationFrame(() => initSim())
+  } finally {
+    loading.value = false
+  }
+}
+
+async function submitRecord() {
+  if (!form.value.source_name || !form.value.target_name || !form.value.amount) {
+    ElMessage.warning('请填写完整流向信息')
+    return
+  }
+  submitting.value = true
+  try {
+    await createFlowRecord(form.value)
+    ElMessage.success('已写入流向记录')
+    dialogVisible.value = false
+    await fetchFlowGraph()
+  } finally {
+    submitting.value = false
+  }
+}
+
 const resizeObs = typeof ResizeObserver !== 'undefined'
-  ? new ResizeObserver(() => { cancelAnimationFrame(animationId); initSim() })
+  ? new ResizeObserver(() => initSim())
   : null
 
-onMounted(() => {
-  initSim()
+onMounted(async () => {
+  await fetchFlowGraph()
   if (resizeObs && containerEl.value) resizeObs.observe(containerEl.value)
+  requestAnimationFrame(() => { visible.value = true })
 })
 
 onUnmounted(() => {
@@ -236,67 +238,53 @@ onUnmounted(() => {
   simulation?.stop()
   resizeObs?.disconnect()
 })
-
-const fmt = (v: number) => `¥${v.toLocaleString('zh-CN')}`
 </script>
 
 <template>
-  <div class="flow-page">
-    <header class="page-header">
-      <h1 class="page-title">资金流向</h1>
-      <p class="page-subtitle">基于 D3-Force 的实时资金流向力导向图</p>
+  <div class="flow-page finance-shell" :class="{ 'is-visible': visible }">
+    <header class="page-header finance-page-header">
+      <div class="header-left finance-header-left">
+        <p class="page-eyebrow finance-page-eyebrow">CLASH · FINANCIAL OS</p>
+        <h1 class="page-title finance-page-title">资金流向<span class="gold-dot finance-gold-dot">.</span></h1>
+      </div>
+      <div class="header-actions finance-header-actions">
+        <el-date-picker v-model="year" type="year" value-format="YYYY" style="width: 120px" @change="fetchFlowGraph" />
+        <el-input-number v-model="month" :min="1" :max="12" size="default" @change="fetchFlowGraph" />
+        <el-button type="primary" @click="dialogVisible = true">＋ 写入流向</el-button>
+      </div>
     </header>
 
-    <!-- Stats bar -->
-    <div class="stat-bar">
-      <div class="stat-chip income">
-        <span class="chip-dot"></span>
-        <span class="chip-label">总收入</span>
-        <span class="chip-val">{{ fmt(statsTotal.income) }}</span>
-      </div>
-      <div class="stat-chip expense">
-        <span class="chip-dot"></span>
-        <span class="chip-label">总支出</span>
-        <span class="chip-val">{{ fmt(statsTotal.expense) }}</span>
-      </div>
-      <div class="stat-chip flow">
-        <span class="chip-dot"></span>
-        <span class="chip-label">流转总额</span>
-        <span class="chip-val">{{ fmt(statsTotal.flow) }}</span>
-      </div>
+    <section class="summary-bar finance-summary-bar" v-loading="loading">
+      <div class="summary-item finance-summary-item"><span class="summary-label finance-summary-label">总收入节点</span><span class="summary-value finance-summary-value income">{{ formatCurrency(String(statsTotal.income)) }}</span></div>
+      <div class="summary-divider finance-summary-divider" />
+      <div class="summary-item finance-summary-item"><span class="summary-label finance-summary-label">总支出节点</span><span class="summary-value finance-summary-value expense">{{ formatCurrency(String(statsTotal.expense)) }}</span></div>
+      <div class="summary-divider finance-summary-divider" />
+      <div class="summary-item finance-summary-item summary-count finance-summary-count"><span class="summary-label finance-summary-label">流转总额</span><span class="summary-value finance-summary-value">{{ formatCurrency(String(statsTotal.flow)) }}</span></div>
+      <div class="summary-glow finance-summary-glow"></div>
+    </section>
+
+    <div ref="containerEl" class="canvas-wrap" v-loading="loading">
+      <canvas ref="canvasEl" class="force-canvas" @mousemove="handleMouseMove" @mouseleave="tooltip.visible = false" />
+      <div v-if="nodes.length === 0 && !loading" class="empty">暂无流向数据，请先写入记录</div>
     </div>
 
-    <!-- Legend -->
-    <div class="legend">
-      <span class="legend-item">
-        <span class="dot income"></span>收入来源
-      </span>
-      <span class="legend-item">
-        <span class="dot account"></span>账户
-      </span>
-      <span class="legend-item">
-        <span class="dot expense"></span>支出类别
-      </span>
-      <span class="legend-item arrow">── 箭头粗细代表资金量</span>
-    </div>
+    <el-dialog v-model="dialogVisible" title="写入资金流向" width="min(520px, 92vw)" align-center>
+      <el-form :model="form" label-width="88px" class="finance-dialog-form">
+        <el-form-item label="来源名称"><el-input v-model="form.source_name" placeholder="例：工资" /></el-form-item>
+        <el-form-item label="来源类型"><el-select v-model="form.source_type" style="width:100%"><el-option v-for="t in typeOptions" :key="t.value" :label="t.label" :value="t.value" /></el-select></el-form-item>
+        <el-form-item label="去向名称"><el-input v-model="form.target_name" placeholder="例：招商银行" /></el-form-item>
+        <el-form-item label="去向类型"><el-select v-model="form.target_type" style="width:100%"><el-option v-for="t in typeOptions" :key="t.value" :label="t.label" :value="t.value" /></el-select></el-form-item>
+        <el-form-item label="金额"><el-input v-model="form.amount" placeholder="0.00" /></el-form-item>
+        <el-form-item label="日期"><el-date-picker v-model="form.flow_date" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="form.description" type="textarea" rows="2" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="finance-dialog-footer"><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitRecord">确认</el-button></div>
+      </template>
+    </el-dialog>
 
-    <!-- Canvas container -->
-    <div ref="containerEl" class="canvas-wrap">
-      <canvas
-        ref="canvasEl"
-        class="force-canvas"
-        @mousemove="handleMouseMove"
-        @mouseleave="tooltip.visible = false"
-      />
-    </div>
-
-    <!-- Tooltip -->
     <Teleport to="body">
-      <div
-        v-if="tooltip.visible"
-        class="flow-tooltip"
-        :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
-      >
+      <div v-if="tooltip.visible" class="flow-tooltip" :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }">
         <span class="tt-title">{{ tooltip.text }}</span>
         <span class="tt-val">{{ tooltip.sub }}</span>
       </div>
@@ -305,82 +293,13 @@ const fmt = (v: number) => `¥${v.toLocaleString('zh-CN')}`
 </template>
 
 <style scoped>
-.flow-page { display: flex; flex-direction: column; height: 100%; }
-
-.page-header { margin-bottom: 20px; }
-.page-title  { font-size: 24px; font-weight: 700; color: var(--color-text-primary); }
-.page-subtitle { font-size: 13px; color: var(--color-text-muted); margin-top: 4px; }
-
-.stat-bar {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-
-.stat-chip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-}
-.stat-chip .chip-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.stat-chip.income  .chip-dot { background: var(--color-income); }
-.stat-chip.expense .chip-dot { background: var(--color-expense); }
-.stat-chip.flow    .chip-dot { background: var(--color-accent); }
-.chip-label { color: var(--color-text-muted); }
-.chip-val   { font-family: var(--font-mono); font-weight: 600; color: var(--color-text-primary); }
-
-.legend {
-  display: flex;
-  gap: 20px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-.legend-item.arrow { color: var(--color-text-muted); font-style: italic; }
-.dot {
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.dot.income  { background: var(--color-income); }
-.dot.account { background: var(--color-accent); }
-.dot.expense { background: var(--color-expense); }
-
-.canvas-wrap {
-  flex: 1;
-  min-height: 440px;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  position: relative;
-}
-
-.force-canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  cursor: crosshair;
-}
+.finance-summary-value.income { color: var(--color-income); }
+.finance-summary-value.expense { color: var(--color-expense); }
+.canvas-wrap { min-height: 460px; background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; position: relative; }
+.force-canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+.empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--color-text-muted); }
 </style>
 
-<!-- Tooltip is teleported to body — global styles -->
 <style>
 .flow-tooltip {
   position: fixed;
@@ -397,5 +316,5 @@ const fmt = (v: number) => `¥${v.toLocaleString('zh-CN')}`
   transform: translateX(-50%);
 }
 .flow-tooltip .tt-title { font-size: 13px; color: #bfbebf; font-weight: 600; }
-.flow-tooltip .tt-val   { font-size: 12px; color: #c8ad7e; font-family: 'JetBrains Mono', monospace; }
+.flow-tooltip .tt-val { font-size: 12px; color: #c8ad7e; font-family: 'JetBrains Mono', monospace; }
 </style>

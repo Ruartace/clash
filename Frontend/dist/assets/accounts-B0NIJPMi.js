@@ -1,1 +1,0 @@
-import{s as c}from"./_plugin-vue_export-helper-CrW6nqEP.js";function o(){return c.get("/accounts/")}function e(t){return c.post("/accounts/",t)}function r(t,n){return c.put(`/accounts/${t}/`,n)}export{e as c,o as g,r as u};

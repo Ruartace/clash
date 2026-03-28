@@ -1,142 +1,278 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import * as echarts from 'echarts'
+
 import { getMonthlySummary, getCategoryBreakdown, getNetWorth } from '@/api/statistics'
 import { formatCurrency } from '@/utils/format'
+import { CHART_THEME, CHART_COLORS } from '@/assets/styles/chart-theme'
+
+interface MonthlyItem {
+  year: number
+  month: number
+  income: string
+  expense: string
+  balance: string
+}
+
+interface CategoryItem {
+  category: string
+  amount: string
+}
 
 const netWorth = ref({ net_worth: '0', total_assets: '0', total_liabilities: '0' })
-const monthlySummary = ref<{ year: number; month: number; income: string; expense: string; balance: string }[]>([])
-const categoryBreakdown = ref<{ category: string; amount: string }[]>([])
-const loading = ref(true)
+const monthlySummary = ref<MonthlyItem[]>([])
+const categoryBreakdown = ref<CategoryItem[]>([])
+const loading = ref(false)
+const visible = ref(false)
 
-const currentYear = new Date().getFullYear()
-const currentMonth = new Date().getMonth() + 1
+const now = new Date()
+const currentYear = now.getFullYear()
+const currentMonth = now.getMonth() + 1
 
-onMounted(async () => {
+const selectedYear = ref(String(currentYear))
+const selectedMonth = ref(`${currentYear}-${String(currentMonth).padStart(2, '0')}`)
+
+const monthlyRows = computed(() => [...monthlySummary.value].sort((a, b) => a.month - b.month))
+
+const annualIncome = computed(() => monthlyRows.value.reduce((s, m) => s + parseFloat(m.income || '0'), 0))
+const annualExpense = computed(() => monthlyRows.value.reduce((s, m) => s + parseFloat(m.expense || '0'), 0))
+const annualBalance = computed(() => annualIncome.value - annualExpense.value)
+const categoryTotal = computed(() => categoryBreakdown.value.reduce((s, c) => s + parseFloat(c.amount || '0'), 0))
+
+function categoryPercent(amount: string) {
+  if (!categoryTotal.value) return 0
+  return Math.round((parseFloat(amount || '0') / categoryTotal.value) * 100)
+}
+
+async function fetchStatistics() {
+  loading.value = true
   try {
-    await Promise.all([
-      getNetWorth().then((r) => { netWorth.value = r.data.data }),
-      getMonthlySummary().then((r) => { monthlySummary.value = r.data.data as unknown as typeof monthlySummary.value }),
-      getCategoryBreakdown({ year: currentYear, month: currentMonth }).then((r) => { categoryBreakdown.value = r.data.data as unknown as typeof categoryBreakdown.value }),
+    const [yearText, monthText] = selectedMonth.value.split('-')
+    const year = Number(yearText)
+    const month = Number(monthText)
+
+    const [netRes, monthlyRes, categoryRes] = await Promise.all([
+      getNetWorth(),
+      getMonthlySummary(Number(selectedYear.value)),
+      getCategoryBreakdown({ year, month }),
     ])
+
+    netWorth.value = netRes.data.data
+    monthlySummary.value = monthlyRes.data.data as unknown as MonthlyItem[]
+    categoryBreakdown.value = categoryRes.data.data as unknown as CategoryItem[]
   } finally {
     loading.value = false
   }
+}
+
+async function handleYearChange() {
+  if (!selectedMonth.value.startsWith(selectedYear.value)) {
+    selectedMonth.value = `${selectedYear.value}-${String(currentMonth).padStart(2, '0')}`
+  }
+  await fetchStatistics()
+}
+
+async function handleMonthChange() {
+  const [yearText] = selectedMonth.value.split('-')
+  selectedYear.value = yearText
+  await fetchStatistics()
+}
+
+const trendEl = ref<HTMLDivElement | null>(null)
+let trendChart: echarts.ECharts | null = null
+
+function renderTrendChart() {
+  if (!trendChart || !monthlyRows.value.length) return
+
+  const labels = monthlyRows.value.map((m) => `${m.month}月`)
+  const incomeData = monthlyRows.value.map((m) => Number(m.income || 0))
+  const expenseData = monthlyRows.value.map((m) => Number(m.expense || 0))
+  const balanceData = monthlyRows.value.map((m) => Number(m.balance || 0))
+
+  trendChart.setOption({
+    ...CHART_THEME,
+    color: [CHART_COLORS.income, CHART_COLORS.expense, CHART_COLORS.primary],
+    tooltip: {
+      ...CHART_THEME.tooltip,
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+    },
+    legend: {
+      ...CHART_THEME.legend,
+      data: ['收入', '支出', '净额'],
+      top: 0,
+      right: 0,
+      itemWidth: 12,
+      itemHeight: 8,
+    },
+    grid: {
+      left: 8,
+      right: 8,
+      top: 36,
+      bottom: 6,
+      containLabel: true,
+    },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      axisLine: { lineStyle: { color: '#2e2b27' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#7a7874' },
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: '#7a7874' },
+      splitLine: { lineStyle: { color: '#2e2b27', type: 'dashed', opacity: 0.5 } },
+    },
+    series: [
+      {
+        name: '收入',
+        type: 'bar',
+        barMaxWidth: 14,
+        data: incomeData,
+        itemStyle: {
+          borderRadius: [4, 4, 0, 0],
+        },
+      },
+      {
+        name: '支出',
+        type: 'bar',
+        barMaxWidth: 14,
+        data: expenseData,
+        itemStyle: {
+          borderRadius: [4, 4, 0, 0],
+        },
+      },
+      {
+        name: '净额',
+        type: 'line',
+        data: balanceData,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: {
+          width: 2,
+        },
+      },
+    ],
+  })
+}
+
+function initTrendChart() {
+  if (!trendEl.value) return
+  trendChart = echarts.init(trendEl.value)
+  renderTrendChart()
+}
+
+function handleResize() {
+  trendChart?.resize()
+}
+
+watch(monthlyRows, () => {
+  renderTrendChart()
+}, { deep: true })
+
+onMounted(async () => {
+  await fetchStatistics()
+  initTrendChart()
+  requestAnimationFrame(() => { visible.value = true })
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  trendChart?.dispose()
+  trendChart = null
 })
 </script>
 
 <template>
-  <div class="statistics-page">
-    <header class="page-header">
-      <h1 class="page-title">统计分析</h1>
-      <p class="page-subtitle">可视化您的财务数据</p>
+  <div class="statistics-page finance-shell" :class="{ 'is-visible': visible }">
+    <header class="page-header finance-page-header">
+      <div class="header-left finance-header-left">
+        <p class="page-eyebrow finance-page-eyebrow">CLASH · FINANCIAL OS</p>
+        <h1 class="page-title finance-page-title">统计分析<span class="gold-dot finance-gold-dot">.</span></h1>
+      </div>
+      <div class="header-actions finance-header-actions">
+        <el-date-picker v-model="selectedYear" type="year" value-format="YYYY" style="width: 120px" @change="handleYearChange" />
+        <el-date-picker v-model="selectedMonth" type="month" value-format="YYYY-MM" style="width: 140px" @change="handleMonthChange" />
+      </div>
     </header>
 
-    <div class="stat-grid" v-loading="loading">
-      <div class="stat-card highlight">
-        <p class="stat-label">净资产</p>
-        <p class="stat-value">{{ formatCurrency(netWorth.net_worth) }}</p>
+    <section class="summary-bar finance-summary-bar" v-loading="loading">
+      <div class="summary-item finance-summary-item">
+        <span class="summary-label finance-summary-label">净资产</span>
+        <span class="summary-value finance-summary-value">{{ formatCurrency(netWorth.net_worth) }}</span>
       </div>
-      <div class="stat-card">
-        <p class="stat-label">总资产</p>
-        <p class="stat-value income">{{ formatCurrency(netWorth.total_assets) }}</p>
+      <div class="summary-divider finance-summary-divider" />
+      <div class="summary-item finance-summary-item">
+        <span class="summary-label finance-summary-label">总资产</span>
+        <span class="summary-value finance-summary-value income">{{ formatCurrency(netWorth.total_assets) }}</span>
       </div>
-      <div class="stat-card">
-        <p class="stat-label">总负债</p>
-        <p class="stat-value expense">{{ formatCurrency(netWorth.total_liabilities) }}</p>
+      <div class="summary-divider finance-summary-divider" />
+      <div class="summary-item finance-summary-item">
+        <span class="summary-label finance-summary-label">总负债</span>
+        <span class="summary-value finance-summary-value expense">{{ formatCurrency(netWorth.total_liabilities) }}</span>
       </div>
-    </div>
+      <div class="summary-item finance-summary-item summary-count finance-summary-count">
+        <span class="summary-label finance-summary-label">年度净额</span>
+        <span class="summary-value finance-summary-value" :class="annualBalance >= 0 ? 'income' : 'expense'">{{ formatCurrency(String(annualBalance)) }}</span>
+      </div>
+      <div class="summary-glow finance-summary-glow"></div>
+    </section>
 
-    <div class="charts-row">
-      <!-- Monthly income/expense table -->
-      <section class="section">
-        <h2 class="section-title">月度收支（{{ currentYear }}年）</h2>
-        <el-table :data="monthlySummary" style="width:100%" size="small">
-          <el-table-column label="月份" width="80">
-            <template #default="{ row }">{{ row.month }}月</template>
-          </el-table-column>
-          <el-table-column label="收入">
-            <template #default="{ row }">
-              <span class="income">{{ formatCurrency(row.income) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="支出">
-            <template #default="{ row }">
-              <span class="expense">{{ formatCurrency(row.expense) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="净额">
-            <template #default="{ row }">
-              <span :class="parseFloat(row.balance) >= 0 ? 'income' : 'expense'">
-                {{ formatCurrency(row.balance) }}
-              </span>
-            </template>
-          </el-table-column>
-        </el-table>
-      </section>
+    <section class="stats-grid" v-loading="loading">
+      <article class="stats-card monthly-card">
+        <div class="card-head">
+          <h3 class="card-title">月度收支趋势 · {{ selectedYear }}年</h3>
+          <p class="card-meta">收入 {{ formatCurrency(String(annualIncome)) }} · 支出 {{ formatCurrency(String(annualExpense)) }}</p>
+        </div>
+        <div v-if="monthlyRows.length" ref="trendEl" class="trend-chart"></div>
+        <div v-else class="empty">暂无月度数据</div>
+      </article>
 
-      <!-- Category breakdown -->
-      <section class="section">
-        <h2 class="section-title">本月支出分类</h2>
-        <div v-if="categoryBreakdown.length === 0 && !loading" class="empty">暂无数据</div>
-        <div class="category-list">
+      <article class="stats-card category-card">
+        <div class="card-head">
+          <h3 class="card-title">本月支出分类 · {{ selectedMonth }}</h3>
+          <p class="card-meta">分类总支出 {{ formatCurrency(String(categoryTotal)) }}</p>
+        </div>
+        <div v-if="categoryBreakdown.length" class="category-list">
           <div v-for="c in categoryBreakdown" :key="c.category" class="category-item">
             <div class="category-row">
               <span class="category-name">{{ c.category }}</span>
               <span class="category-amount">{{ formatCurrency(c.amount) }}</span>
             </div>
+            <div class="category-track">
+              <div class="category-fill" :style="{ width: `${categoryPercent(c.amount)}%` }"></div>
+            </div>
           </div>
         </div>
-      </section>
-    </div>
+        <div v-else class="empty">暂无分类支出数据</div>
+      </article>
+    </section>
   </div>
 </template>
 
 <style scoped>
-.statistics-page { max-width: 1100px; }
-.page-header { margin-bottom: 28px; }
-.page-title { font-size: 24px; font-weight: 700; color: var(--color-text-primary); }
-.page-subtitle { font-size: 13px; color: var(--color-text-muted); margin-top: 4px; }
-
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 32px;
-}
-.stat-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 20px 24px;
-}
-.stat-card.highlight {
-  border-color: rgba(56, 189, 248, 0.3);
-  background: linear-gradient(135deg, var(--color-bg-card), rgba(56,189,248,0.05));
-}
-.stat-label { font-size: 12px; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
-.stat-value { font-size: 22px; font-weight: 700; font-family: var(--font-mono); color: var(--color-text-primary); }
-.stat-value.income { color: var(--color-income); }
-.stat-value.expense { color: var(--color-expense); }
-
-.charts-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-}
-
-.section { margin-bottom: 0; }
-.section-title { font-size: 16px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 14px; }
-
-.income { color: var(--color-income); font-family: var(--font-mono); font-weight: 600; }
-.expense { color: var(--color-expense); font-family: var(--font-mono); font-weight: 600; }
-
-.category-list { display: flex; flex-direction: column; gap: 12px; }
-.category-row { display: flex; align-items: center; gap: 8px; }
-.category-name { flex: 1; font-size: 13px; color: var(--color-text-primary); }
-.category-amount { font-size: 13px; font-family: var(--font-mono); color: var(--color-expense); }
-.empty { color: var(--color-text-muted); font-size: 14px; padding: 20px; }
-
-@media (max-width: 768px) {
-  .charts-row { grid-template-columns: 1fr; }
-}
+.finance-summary-value.income { color: var(--color-income); }
+.finance-summary-value.expense { color: var(--color-expense); }
+.stats-grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 16px; }
+.stats-card { background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--shadow-card); }
+.card-head { margin-bottom: 14px; }
+.card-title { font-size: 14px; color: var(--color-text-primary); font-weight: 700; letter-spacing: .02em; }
+.card-meta { margin-top: 4px; font-size: 12px; color: var(--color-text-muted); font-family: var(--font-mono); }
+.trend-chart { width: 100%; height: 320px; }
+.category-list { display: flex; flex-direction: column; gap: 10px; }
+.category-item { border: 1px solid var(--color-border); background: var(--color-bg-secondary); border-radius: var(--radius-sm); padding: 10px; }
+.category-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.category-name { color: var(--color-text-primary); font-size: 13px; }
+.category-amount { font-family: var(--font-mono); font-size: 12px; color: var(--color-expense); }
+.category-track { background: var(--color-bg-hover); border-radius: 999px; height: 8px; overflow: hidden; }
+.category-fill { height: 100%; border-radius: 999px; transition: width .35s ease; background: linear-gradient(90deg, rgba(200,173,126,.4), var(--color-accent)); }
+.income { color: var(--color-income); }
+.expense { color: var(--color-expense); }
+.empty { color: var(--color-text-muted); font-size: 13px; padding: 24px; text-align: center; }
+@media (max-width: 960px) { .stats-grid { grid-template-columns: 1fr; } .trend-chart { height: 280px; } }
 </style>

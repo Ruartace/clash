@@ -129,3 +129,72 @@ export interface CategoryBreakdown {
   total: string
   percentage: string
 }
+
+// ─── Extended Stats (Flow / Heatmap / Network) ─────────────────────────────
+export type FlowNodeType = 'income' | 'account' | 'expense' | 'asset' | 'liability' | 'goal'
+
+export interface FlowRecord {
+  id: number
+  source_name: string
+  source_type: FlowNodeType
+  target_name: string
+  target_type: FlowNodeType
+  amount: string
+  flow_date: string
+  description: string
+  created_at: string
+  updated_at: string
+}
+
+export interface FlowGraphNode {
+  id: string
+  label: string
+  type: FlowNodeType
+  value: number
+}
+
+export interface FlowGraphLink {
+  source: string
+  target: string
+  amount: number
+  label: string
+}
+
+export interface FlowGraphData {
+  nodes: FlowGraphNode[]
+  links: FlowGraphLink[]
+  summary: {
+    income: number
+    expense: number
+    flow: number
+  }
+}
+
+export interface HeatmapPoint {
+  date: string
+  value: number
+}
+
+export type HeatmapMode = 'income' | 'expense' | 'net'
+
+export type NetworkCategory = 'user' | 'account' | 'asset' | 'liability' | 'goal'
+
+export interface NetworkNode {
+  id: string
+  label: string
+  category: NetworkCategory
+  value: number
+  sub: string
+}
+
+export interface NetworkLink {
+  source: string
+  target: string
+  label: string
+  strength: number
+}
+
+export interface AssetNetworkData {
+  nodes: NetworkNode[]
+  links: NetworkLink[]
+}

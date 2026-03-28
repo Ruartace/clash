@@ -1,1 +1,0 @@
-import{s as t}from"./_plugin-vue_export-helper-CrW6nqEP.js";function s(e){return t.get("/statistics/monthly/",{params:void 0})}function a(e){return t.get("/statistics/category/",{params:e})}function o(){return t.get("/statistics/net-worth/")}export{s as a,a as b,o as g};
