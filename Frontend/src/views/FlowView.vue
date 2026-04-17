@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import * as d3Force from 'd3-force'
 import { ElMessage } from 'element-plus'
 
@@ -23,6 +23,18 @@ interface FlowLink extends d3Force.SimulationLinkDatum<FlowNode> {
   label: string
 }
 
+type FlowNodeType = FlowNode['type']
+
+interface FlowForm {
+  source_name: string
+  source_type: FlowNodeType
+  target_name: string
+  target_type: FlowNodeType
+  amount: string
+  flow_date: string
+  description: string
+}
+
 const loading = ref(false)
 const visible = ref(false)
 const year = ref(new Date().getFullYear())
@@ -38,15 +50,16 @@ const tooltip = ref({ visible: false, x: 0, y: 0, text: '', sub: '' })
 
 const dialogVisible = ref(false)
 const submitting = ref(false)
-const form = ref({
+const defaultForm = (): FlowForm => ({
   source_name: '',
-  source_type: 'income' as FlowNode['type'],
+  source_type: 'income',
   target_name: '',
-  target_type: 'account' as FlowNode['type'],
+  target_type: 'account',
   amount: '',
   flow_date: '',
   description: '',
 })
+const form = ref<FlowForm>(defaultForm())
 
 const typeOptions = [
   { label: '收入', value: 'income' },
@@ -87,6 +100,9 @@ function draw() {
   ctx.save()
   ctx.scale(dpr, dpr)
 
+  const linkAmounts = links.value.map((l) => l.amount)
+  const maxAmt = linkAmounts.length > 0 ? Math.max(1, ...linkAmounts) : 1
+
   for (const link of links.value) {
     const s = link.source as FlowNode
     const t = link.target as FlowNode
@@ -102,7 +118,6 @@ function draw() {
     const x2 = (t.x || 0) - ux * nodeRadius(t)
     const y2 = (t.y || 0) - uy * nodeRadius(t)
 
-    const maxAmt = Math.max(1, ...links.value.map((l) => l.amount))
     const lineW = 1 + (link.amount / maxAmt) * 4
 
     ctx.beginPath()
@@ -198,10 +213,17 @@ async function fetchFlowGraph() {
   try {
     const res = await getFlowGraph({ year: year.value, month: month.value })
     const data = res.data.data
+    if (!data?.nodes || !data?.links || !data?.summary) {
+      ElMessage.warning('流向数据结构异常')
+      return
+    }
     nodes.value = data.nodes.map((n) => ({ ...n }))
     links.value = data.links.map((l) => ({ ...l }))
     statsTotal.value = data.summary
     requestAnimationFrame(() => initSim())
+  } catch (err) {
+    ElMessage.error('获取流向数据失败')
+    console.error(err)
   } finally {
     loading.value = false
   }
@@ -217,6 +239,7 @@ async function submitRecord() {
     await createFlowRecord(form.value)
     ElMessage.success('已写入流向记录')
     dialogVisible.value = false
+    form.value = defaultForm()
     await fetchFlowGraph()
   } finally {
     submitting.value = false

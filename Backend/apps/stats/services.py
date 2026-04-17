@@ -146,12 +146,17 @@ def get_flow_graph(user, year: int | None = None, month: int | None = None) -> d
     }
 
 
-def get_heatmap_data(user, year: int, mode: str = 'expense') -> list:
+def get_heatmap_data(user, year: int, mode: str = 'expense', account_id: int | None = None, category: str | None = None) -> list:
     qs = Transaction.objects.filter(
         user=user,
         transaction_date__year=year,
         is_deleted=False,
     )
+
+    if account_id:
+        qs = qs.filter(account_id=account_id)
+    if category:
+        qs = qs.filter(category=category)
 
     inc_qs = qs.filter(transaction_type='income').values('transaction_date').annotate(total=Sum('amount'))
     exp_qs = qs.filter(transaction_type='expense').values('transaction_date').annotate(total=Sum('amount'))

@@ -77,6 +77,19 @@ class FlowRecordListCreateView(APIView):
         return success(data=FlowRecordSerializer(item).data, message='创建成功', status=201)
 
 
+class FlowRecordDetailView(APIView):
+    """资金流向记录详情/删除"""
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk: int):
+        try:
+            record = services.get_flow_records(request.user).get(pk=pk)
+        except Exception:
+            return error(message='记录不存在', status=404)
+        services.delete_flow_record(record)
+        return success(message='已删除')
+
+
 class FlowGraphView(APIView):
     """资金流向图数据"""
     permission_classes = [IsAuthenticated]
@@ -101,7 +114,15 @@ class HeatmapView(APIView):
         mode = request.query_params.get('mode', 'expense')
         if mode not in ['income', 'expense', 'net']:
             return error(message='mode 仅支持 income/expense/net')
-        data = services.get_heatmap_data(request.user, int(year), mode)
+        account_id = request.query_params.get('account')
+        category = request.query_params.get('category') or None
+        data = services.get_heatmap_data(
+            request.user,
+            int(year),
+            mode,
+            account_id=int(account_id) if account_id else None,
+            category=category,
+        )
         return success(data=data)
 
 

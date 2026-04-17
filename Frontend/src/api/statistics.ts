@@ -42,11 +42,15 @@ export function createFlowRecord(payload: {
   return service.post<ApiResponse<FlowRecord>>('/statistics/flow-records/', payload)
 }
 
+export function deleteFlowRecord(id: number) {
+  return service.delete<ApiResponse<null>>(`/statistics/flow-records/${id}/`)
+}
+
 export function getFlowGraph(params?: { year?: number; month?: number }) {
   return service.get<ApiResponse<FlowGraphData>>('/statistics/flow-graph/', { params })
 }
 
-export function getHeatmapData(params: { year: number; mode: HeatmapMode }) {
+export function getHeatmapData(params: { year: number; mode: HeatmapMode; account?: number; category?: string }) {
   return service.get<ApiResponse<HeatmapPoint[]>>('/statistics/heatmap/', { params })
 }
 
